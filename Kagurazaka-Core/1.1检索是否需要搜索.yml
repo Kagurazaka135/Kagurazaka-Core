@@ -1,0 +1,337 @@
+app:
+  description: 判断是否搜索
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: workflow
+  name: '1.1'
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/gemini:0.7.20@de0063a630a6d1b2c025fb84f3462ba5151fb60618309cd595c3f4711b1df847
+    version: null
+kind: app
+version: 0.6.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      allowed_file_upload_methods:
+      - local_file
+      - remote_url
+      enabled: false
+      fileUploadConfig:
+        attachment_image_file_size_limit: 2
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        file_upload_limit: 50
+        image_file_batch_limit: 10
+        image_file_size_limit: 10
+        single_chunk_attachment_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: question-classifier
+      id: 1776149199854-source-1776149257647-target
+      source: '1776149199854'
+      sourceHandle: source
+      target: '1776149257647'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: question-classifier
+        targetType: if-else
+      id: 1776149257647-1-1776150082500-target
+      source: '1776149257647'
+      sourceHandle: '1'
+      target: '1776150082500'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: code
+      id: 1776150082500-true-1776150196160-target
+      source: '1776150082500'
+      sourceHandle: 'true'
+      target: '1776150196160'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: code
+      id: 1776150082500-false-1776150217527-target
+      source: '1776150082500'
+      sourceHandle: 'false'
+      target: '1776150217527'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: code
+        targetType: end
+      id: 1776150217527-source-1776149304563-target
+      source: '1776150217527'
+      sourceHandle: source
+      target: '1776149304563'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: code
+        targetType: end
+      id: 1776150196160-source-1776149300954-target
+      source: '1776150196160'
+      sourceHandle: source
+      target: '1776149300954'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        selected: false
+        title: 用户输入
+        type: start
+        variables:
+        - default: ''
+          hint: ''
+          label: text
+          options: []
+          placeholder: ''
+          required: true
+          type: text-input
+          variable: text
+      height: 108
+      id: '1776149199854'
+      position:
+        x: 80
+        y: 282
+      positionAbsolute:
+        x: 80
+        y: 282
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        classes:
+        - id: '1'
+          name: 需要搜索
+        instructions: ''
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gemini-2.5-flash
+          provider: langgenius/gemini/google
+        query_variable_selector:
+        - '1776149199854'
+        - text
+        selected: false
+        title: 问题分类器
+        type: question-classifier
+        vision:
+          enabled: false
+      height: 131
+      id: '1776149257647'
+      position:
+        x: 382
+        y: 282
+      positionAbsolute:
+        x: 382
+        y: 282
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 241
+    - data:
+        outputs:
+        - value_selector:
+          - '1776150196160'
+          - result
+          value_type: string
+          variable: text
+        selected: false
+        title: 输出
+        type: end
+      height: 87
+      id: '1776149300954'
+      position:
+        x: 1331
+        y: 276
+      positionAbsolute:
+        x: 1331
+        y: 276
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 241
+    - data:
+        outputs:
+        - value_selector:
+          - '1776150217527'
+          - result
+          value_type: string
+          variable: text
+        selected: false
+        title: 输出 2
+        type: end
+      height: 87
+      id: '1776149304563'
+      position:
+        x: 1331
+        y: 423
+      positionAbsolute:
+        x: 1331
+        y: 423
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 241
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: contains
+            id: d6712cd5-c73c-4603-9b6d-61a5ab6a5b46
+            value: 需要搜索
+            varType: string
+            variable_selector:
+            - '1776149257647'
+            - class_name
+          id: 'true'
+          logical_operator: and
+        selected: false
+        title: 条件分支
+        type: if-else
+      height: 147
+      id: '1776150082500'
+      position:
+        x: 717
+        y: 259
+      positionAbsolute:
+        x: 717
+        y: 259
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 241
+    - data:
+        code: "def main(arg1: str):\r\n    # 你的逻辑处理\r\n    return {\r\n        \"\
+          result\": \"true\"\r\n    }"
+        code_language: python3
+        outputs:
+          result:
+            children: null
+            type: string
+        selected: true
+        title: 代码执行
+        type: code
+        variables:
+        - value_selector:
+          - '1776149257647'
+          - class_name
+          value_type: string
+          variable: arg1
+      height: 51
+      id: '1776150196160'
+      position:
+        x: 994
+        y: 282
+      positionAbsolute:
+        x: 994
+        y: 282
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 241
+    - data:
+        code: "def main(arg1: str):\r\n    # 你的逻辑处理\r\n    return {\r\n        \"\
+          result\": \"false\"\r\n    }"
+        code_language: python3
+        outputs:
+          result:
+            children: null
+            type: string
+        selected: false
+        title: 代码执行 2
+        type: code
+        variables:
+        - value_selector:
+          - '1776149257647'
+          - class_name
+          value_type: string
+          variable: arg1
+      height: 51
+      id: '1776150217527'
+      position:
+        x: 994
+        y: 372
+      positionAbsolute:
+        x: 994
+        y: 372
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 241
+    viewport:
+      x: -666
+      y: 193.5
+      zoom: 1
+  rag_pipeline_variables: []

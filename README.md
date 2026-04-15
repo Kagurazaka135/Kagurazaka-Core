@@ -1,5 +1,3 @@
-明白，避开表格形式，用更流利、更具层级感的排版来呈现。
-
 Kagurazaka-Core
 Kagurazaka-Core is a logic processing framework driven by task deconstruction and multi-model cascading. The system dismantles complex instructions into specialized dimensions—Code, Logic, and Chat—routing them to dedicated sub-engines for execution, followed by an automated audit and polishing layer before final output.
 

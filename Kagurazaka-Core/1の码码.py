@@ -142,7 +142,7 @@ def run_workflow(user_input: str):
         final_results["chat"] = field_chat
        
     else:
-         print("[*] 正在进行聊天...")
+        print("[*] 正在进行聊天...")
         res = call_dify_workflow("LLM_CHAT", {"text": field_chat})
         final_results["chat"] = res.get("text", "")
 
@@ -150,7 +150,7 @@ def run_workflow(user_input: str):
     if "未找到聊天字段" in field_code:
         final_results["code"] = field_code
     else:
-         print("[*] 正在进行代码...")
+        print("[*] 正在进行代码...")
         res = call_dify_workflow("LLM_CODE", {"text": field_code})
         final_results["code"] = res.get("text", "")
 
@@ -158,7 +158,7 @@ def run_workflow(user_input: str):
     if "未找到聊天字段" in field_logic:
         final_results["logic"] = field_logic
     else:
-         print("[*] 正在进行逻辑...")
+        print("[*] 正在进行逻辑...")
         res = call_dify_workflow("LLM_LOGIC", {"text": field_logic})
         final_results["logic"] = res.get("text", "")
 

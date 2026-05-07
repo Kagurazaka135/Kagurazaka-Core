@@ -11,7 +11,7 @@ from collections import deque, defaultdict
 import hashlib
 
 # ==========================================
-# 1. 配置中心 (保持原样)
+# 1. 配置中心 
 # ==========================================
 CONFIG = {
     # SerpAPI 配置 (用于 Google 搜索)

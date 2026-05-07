@@ -11,7 +11,7 @@ from collections import deque, defaultdict
 import hashlib
 
 # ==========================================
-# 1. 配置中心
+# 1. 配置中心 (保持原样)
 # ==========================================
 CONFIG = {
     # SerpAPI 配置 (用于 Google 搜索)
@@ -50,6 +50,12 @@ CONFIG = {
             "API_KEY": "app-xxxx",
             "BASE_URL": "https://api.dify.ai"
         }
+    },
+    "OPENAI": {
+        "API_KEY": "sk-xxxx",
+        "BASE_URL": "https://api.openai.com",
+        "MODEL": "gpt-4.1-mini"
+    }
     }
 }
 
@@ -182,7 +188,7 @@ class SimpleMemorySystem:
 memory_system = None
 
 # ==========================================
-# 3. 核心功能函数
+# 3. 核心功能函数 
 # ==========================================
 
 def call_dify_workflow(node_key: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -246,6 +252,61 @@ def extract_json_field(raw_text: str, field_name: str) -> str:
     except:
         return "未找到聊天字段"
 
+def quality_check_openai(text: str) -> Tuple[bool, str]:
+    """直接调用 OpenAI API 进行输出质量检查，返回 (是否通过, 修改建议)"""
+    cfg = CONFIG["OPENAI"]
+    url = f"{cfg['BASE_URL'].rstrip('/')}/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {cfg['API_KEY']}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": cfg["MODEL"],
+        "temperature": 0.3,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "你是一个专业的输出质量审核员。请严格检查以下文本是否满足所有质量要求。\n\n"
+                    "质量检查标准：\n"
+                    "1. 语言自然流畅，没有生硬的机翻感或AI口癖（如\"总的来说\"、\"综上所述\"等）\n"
+                    "2. 不包含未翻译的英文代码、变量名、函数名或乱码（日语原文除外，♡等特殊符号除外）\n"
+                    "3. 回答完整、逻辑通顺，没有明显的逻辑错误、事实错误或前后矛盾\n"
+                    "4. 回答内容准确切题，没有编造虚假信息或答非所问\n"
+                    "5. 格式清晰易读，没有多余的JSON结构残留\n\n"
+                    "请严格按照以下JSON格式输出检查结果（只输出JSON，不要包含markdown代码块标记）：\n"
+                    '{"pass":true,"feedback":""}\n\n'
+                    "如果文本未通过检查（pass为false），feedback必须包含：\n"
+                    "- 具体指出哪里有问题\n"
+                    "- 明确说明应该如何修改\n\n"
+                    "注意：\n"
+                    "- pass为true时feedback必须为空字符串\"\"\n"
+                    "- pass为false时feedback必须包含具体、可操作的修改建议\n"
+                    "- 只输出JSON，不要输出任何其他内容"
+                )
+            },
+            {
+                "role": "user",
+                "content": text
+            }
+        ]
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        body = response.json()
+        raw = body["choices"][0]["message"]["content"].strip()
+        if raw.startswith("```"):
+            raw = re.sub(r"```\w*\n?", "", raw).replace("```", "").strip()
+        result = json.loads(raw)
+        passed = result.get("pass", False)
+        feedback = result.get("feedback", "")
+        return passed, feedback
+    except Exception as e:
+        print(f"[!] 质检API调用或解析失败: {e}")
+        return True, ""
+
 # ==========================================
 # 3. 线性执行逻辑 
 # ==========================================
@@ -267,28 +328,29 @@ def run_workflow(user_input: str):
     # 工作流逻辑：根据分类器结果判断 (保持原判定逻辑)
     is_search_needed = "true" in str(classifier_out)
 
-    # --- 步骤2: 搜索处理 ---
+    # --- 步骤2: 搜索处理 (保持原逻辑) ---
     search_context = ""
     if is_search_needed:
         search_context = google_search(user_input)  # 注意：搜索仍使用原始输入
     else:
         print("[*] 跳过搜索步骤")
 
-    # --- 步骤3 & 4: 分类---
+    # --- 步骤3 & 4: 分类 LLM (干饭人) & 代码提取 ---
     # 如果有上下文，在这里加入
     combined_input = f"搜索结果：{search_context}\n用户问题：{enhanced_input}"
     parser_out = call_dify_workflow("LLM_PARSER", {"text": combined_input})
     raw_json_text = parser_out.get("text", "")
 
+    # 提取字段 (保持原逻辑)
     field_chat = extract_json_field(raw_json_text, "聊天")
     field_code = extract_json_field(raw_json_text, "代码")
     field_logic = extract_json_field(raw_json_text, "需要逻辑推理")
 
-    # --- 步骤5:  ---
+    # --- 步骤5: 补救逻辑 (并行转串行) (保持原判定逻辑) ---
     final_results = {}
     task_type = 'chat'  # 默认任务类型
 
-    # 5.1 聊天
+    # 5.1 聊天 (保持原判定)
     if "未找到聊天字段" in field_chat:
         final_results["chat"] = field_chat
     else:
@@ -297,7 +359,7 @@ def run_workflow(user_input: str):
         final_results["chat"] = res.get("text", "")
         task_type = 'chat'
 
-    # 5.2 码码 
+    # 5.2 码码 (保持原判定)
     if "未找到聊天字段" in field_code:
         final_results["code"] = field_code
     else:
@@ -309,7 +371,7 @@ def run_workflow(user_input: str):
         if memory_system:
             memory_system.update_task_context('code', {'input': field_code, 'output': res.get("text", "")})
 
-    # 5.3 来硬的 (逻辑) 
+    # 5.3 来硬的 (逻辑) (保持原判定)
     if "未找到聊天字段" in field_logic:
         final_results["logic"] = field_logic
     else:
@@ -318,13 +380,35 @@ def run_workflow(user_input: str):
         final_results["logic"] = res.get("text", "")
         task_type = 'logic'
 
-    # --- 步骤6: 变量聚合 ---
+    # --- 步骤6: 变量聚合 (保持原逻辑) ---
     aggregated_text = json.dumps(final_results, ensure_ascii=False)
 
     # --- 步骤7: 润色 LLM ---
     print("[*] 正在润色最终回答...")
     polish_out = call_dify_workflow("LLM_POLISH", {"text": aggregated_text})
     final_answer = polish_out.get("text", "润色失败，无结果。")
+
+    # --- 步骤7.5: 质检 & 打回重试---
+    MAX_RETRY = 3
+    for attempt in range(MAX_RETRY):
+        print(f"[*] 正在进行第{attempt+1}次质量检查...")
+        passed, feedback = quality_check_openai(final_answer)
+
+        if passed:
+            print("[*] 质量检查通过！")
+            break
+        else:
+            print(f"[!] 质量检查未通过: {feedback}")
+            if attempt < MAX_RETRY - 1:
+                retry_input = json.dumps({
+                    "原始数据": final_results,
+                    "修改建议": feedback
+                }, ensure_ascii=False)
+                print("[*] 根据反馈重新润色...")
+                polish_out = call_dify_workflow("LLM_POLISH", {"text": retry_input})
+                final_answer = polish_out.get("text", "润色失败，无结果。")
+            else:
+                print(f"[!] 已达最大重试次数（{MAX_RETRY}），使用当前结果。")
 
     # --- 步骤8: 输出 ---
     print("\n" + "="*30 + " 最终输出 " + "="*30)
@@ -336,7 +420,7 @@ def run_workflow(user_input: str):
         memory_system.add_to_history(user_input, final_answer, task_type)
 
 # ==========================================
-# 4. 入口 (略作修改，添加记忆初始化)
+# 4. 入口 
 # ==========================================
 if __name__ == "__main__":
     # 初始化记忆系统

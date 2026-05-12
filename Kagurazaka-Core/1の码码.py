@@ -572,12 +572,14 @@ def run_workflow(user_input: str):
 
     # --- 步骤7.5: 质检 & 打回重试 ---
     MAX_RETRY = 3
+    qc_passed = False
     for attempt in range(MAX_RETRY):
         print(f"[*] 正在进行第{attempt+1}次质量检查...")
         passed, feedback = quality_check_openai(final_answer)
 
         if passed:
             print("[*] 质量检查通过！")
+            qc_passed = True
             break
         else:
             print(f"[!] 质量检查未通过: {feedback}")
@@ -591,6 +593,9 @@ def run_workflow(user_input: str):
                 final_answer = polish_out.get("text", "润色失败，无结果。")
             else:
                 print(f"[!] 已达最大重试次数（{MAX_RETRY}），使用当前结果。")
+
+    if not qc_passed:
+        final_answer = final_answer + "\n\n（Kagurazaka也不知道这样对不对）"
 
     # --- 步骤8: 输出 ---
     print("\n" + "="*30 + " 最终输出 " + "="*30)

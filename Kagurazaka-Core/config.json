@@ -1,0 +1,23 @@
+{
+    "_说明": "填好各API的key，删掉这条_说明",
+    "_base_url说明": "如果用Dify私服或中转API，改对应BASE_URL即可",
+
+    "SERPAPI_KEY": "填你的SerpAPI key，不需要搜索功能就删掉这行",
+
+    "DIFY": {
+        "_说明": "Dify Workflow节点，每个节点一个app key",
+        "CLASSIFIER": { "API_KEY": "app-", "BASE_URL": "https://api.dify.ai" },
+        "LLM_PARSER":  { "API_KEY": "app-", "BASE_URL": "https://api.dify.ai" },
+        "LLM_CHAT":    { "API_KEY": "app-", "BASE_URL": "https://api.dify.ai" },
+        "LLM_CODE":    { "API_KEY": "app-", "BASE_URL": "https://api.dify.ai" },
+        "LLM_LOGIC":   { "API_KEY": "app-", "BASE_URL": "https://api.dify.ai" },
+        "LLM_POLISH":  { "API_KEY": "app-", "BASE_URL": "https://api.dify.ai" }
+    },
+
+    "OPENAI": {
+        "_说明": "质检用的OpenAI直连key（不走Dify）",
+        "API_KEY": "sk-",
+        "BASE_URL": "https://api.openai.com",
+        "MODEL": "gpt-4.1-mini"
+    }
+}

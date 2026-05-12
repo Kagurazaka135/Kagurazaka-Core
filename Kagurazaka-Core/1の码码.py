@@ -11,52 +11,81 @@ from collections import deque, defaultdict
 import hashlib
 
 # ==========================================
-# 1. 配置中心 
+# 1. 配置中心
 # ==========================================
-CONFIG = {
-    # SerpAPI 配置 (用于 Google 搜索)
-    "SERPAPI_KEY": "YOUR_SERPAPI_KEY",
-    
-    # 记忆系统配置
+import copy
+
+_DEFAULT_CONFIG = {
+    "SERPAPI_KEY": "",
     "MEMORY": {
         "WORKING_CAPACITY": 7,
         "SESSION_CAPACITY": 10,
         "SAVE_PATH": "./memory_store/"
     },
-
-    # Dify 节点配置 (每个节点对应独立的 Dify Workflow 应用)
     "NODES": {
-        "CLASSIFIER": { # 问题分类器
-            "API_KEY": "app-xxxx",
-            "BASE_URL": "https://api.dify.ai"
-        },
-        "LLM_PARSER": { # 分类逻辑 
-            "API_KEY": "app-xxxx",
-            "BASE_URL": "https://api.dify.ai"
-        },
-        "LLM_CHAT": { # 聊天
-            "API_KEY": "app-xxxx",
-            "BASE_URL": "https://api.dify.ai"
-        },
-        "LLM_CODE": { # 码码
-            "API_KEY": "app-xxxx",
-            "BASE_URL": "https://api.dify.ai"
-        },
-        "LLM_LOGIC": { # 来硬的 (逻辑)
-            "API_KEY": "app-xxxx",
-            "BASE_URL": "https://api.dify.ai"
-        },
-        "LLM_POLISH": { # 润色
-            "API_KEY": "app-xxxx",
-            "BASE_URL": "https://api.dify.ai"
-        }
+        "CLASSIFIER": {"API_KEY": "app-xxxx", "BASE_URL": "https://api.dify.ai"},
+        "LLM_PARSER":  {"API_KEY": "app-xxxx", "BASE_URL": "https://api.dify.ai"},
+        "LLM_CHAT":    {"API_KEY": "app-xxxx", "BASE_URL": "https://api.dify.ai"},
+        "LLM_CODE":    {"API_KEY": "app-xxxx", "BASE_URL": "https://api.dify.ai"},
+        "LLM_LOGIC":   {"API_KEY": "app-xxxx", "BASE_URL": "https://api.dify.ai"},
+        "LLM_POLISH":  {"API_KEY": "app-xxxx", "BASE_URL": "https://api.dify.ai"}
     },
-    "OPENAI": {
-        "API_KEY": "sk-xxxx",
-        "BASE_URL": "https://api.openai.com",
-        "MODEL": "gpt-4.1-mini"
-    }
-    }
+    "OPENAI": {"API_KEY": "sk-xxxx", "BASE_URL": "https://api.openai.com", "MODEL": "gpt-4.1-mini"},
+    "LOGGING": {"ENABLED": True, "DIR": "./logs/"}
+}
+
+def _load_config() -> Dict:
+    config = copy.deepcopy(_DEFAULT_CONFIG)
+    config_file = "config.json"
+
+    if not os.path.exists(config_file):
+        template = {
+            "_说明": "填好各API的key后删掉这条_说明。不需要的key留空即可。",
+            "_base_url说明": "如果用Dify私服或中转API，改对应BASE_URL",
+            "SERPAPI_KEY": "你的SerpAPI key，不需要搜索就留空",
+            "DIFY": {
+                "_说明": "Dify Workflow节点，填app-开头的api key",
+                "CLASSIFIER": {"API_KEY": "app-", "BASE_URL": "https://api.dify.ai"},
+                "LLM_PARSER":  {"API_KEY": "app-", "BASE_URL": "https://api.dify.ai"},
+                "LLM_CHAT":    {"API_KEY": "app-", "BASE_URL": "https://api.dify.ai"},
+                "LLM_CODE":    {"API_KEY": "app-", "BASE_URL": "https://api.dify.ai"},
+                "LLM_LOGIC":   {"API_KEY": "app-", "BASE_URL": "https://api.dify.ai"},
+                "LLM_POLISH":  {"API_KEY": "app-", "BASE_URL": "https://api.dify.ai"}
+            },
+            "OPENAI": {"API_KEY": "sk-", "BASE_URL": "https://api.openai.com", "MODEL": "gpt-4.1-mini"}
+        }
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(template, f, ensure_ascii=False, indent=4)
+        print(f"[*] 已生成 {config_file} 模板，请填写API key后重新运行")
+        return config
+
+    with open(config_file, "r", encoding="utf-8") as f:
+        user_cfg = json.load(f)
+
+    if "SERPAPI_KEY" in user_cfg and user_cfg["SERPAPI_KEY"]:
+        config["SERPAPI_KEY"] = user_cfg["SERPAPI_KEY"]
+
+    if "DIFY" in user_cfg and isinstance(user_cfg["DIFY"], dict):
+        for node_name, node_cfg in user_cfg["DIFY"].items():
+            if node_name.startswith("_"):
+                continue
+            if node_name in config["NODES"] and isinstance(node_cfg, dict):
+                if node_cfg.get("API_KEY") and not node_cfg["API_KEY"].startswith("app-"):
+                    config["NODES"][node_name]["API_KEY"] = node_cfg["API_KEY"]
+                if node_cfg.get("BASE_URL"):
+                    config["NODES"][node_name]["BASE_URL"] = node_cfg["BASE_URL"]
+
+    if "OPENAI" in user_cfg and isinstance(user_cfg["OPENAI"], dict):
+        if user_cfg["OPENAI"].get("API_KEY") and not user_cfg["OPENAI"]["API_KEY"].startswith("sk-"):
+            config["OPENAI"]["API_KEY"] = user_cfg["OPENAI"]["API_KEY"]
+        if user_cfg["OPENAI"].get("BASE_URL"):
+            config["OPENAI"]["BASE_URL"] = user_cfg["OPENAI"]["BASE_URL"]
+        if user_cfg["OPENAI"].get("MODEL"):
+            config["OPENAI"]["MODEL"] = user_cfg["OPENAI"]["MODEL"]
+
+    return config
+
+CONFIG = _load_config()
 
 # ==========================================
 # 2. 轻量级记忆系统
@@ -207,16 +236,23 @@ def call_dify_workflow(node_key: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
         "user": "script-runner"
     }
 
+    input_len = len(json.dumps(inputs, ensure_ascii=False))
+    t0 = time.time()
     try:
         response = requests.post(url, headers=headers, json=data, timeout=60)
         response.raise_for_status()
         res_json = response.json()
         if "data" in res_json and "outputs" in res_json["data"]:
-            return res_json["data"]["outputs"]
+            outputs = res_json["data"]["outputs"]
+            output_len = len(json.dumps(outputs, ensure_ascii=False))
+            _log_api(node_key, "dify", input_len, (time.time()-t0)*1000, True, output_len)
+            return outputs
         else:
+            _log_api(node_key, "dify", input_len, (time.time()-t0)*1000, False, 0, f"结构异常: {str(res_json)[:200]}")
             print(f"警告: 节点 {node_key} 返回结构异常: {res_json}")
             return {}
     except Exception as e:
+        _log_api(node_key, "dify", input_len, (time.time()-t0)*1000, False, 0, str(e)[:200])
         print(f"错误: 调用 {node_key} 失败: {e}")
         return {}
 
@@ -250,6 +286,153 @@ def extract_json_field(raw_text: str, field_name: str) -> str:
         return data.get(field_name, "未找到聊天字段")
     except:
         return "未找到聊天字段"
+
+# ==========================================
+# 3.5 日志系统
+# ==========================================
+_session_log: List[Dict] = []
+_session_id: str = ""
+_session_start: float = 0.0
+
+def _log_init(session_id: str):
+    global _session_log, _session_id, _session_start
+    _session_log = []
+    _session_id = session_id
+    _session_start = time.time()
+    os.makedirs(CONFIG["LOGGING"]["DIR"], exist_ok=True)
+
+def _log_api(node: str, call_type: str, input_len: int, latency_ms: float, success: bool, output_len: int = 0, error: str = ""):
+    entry = {
+        "session": _session_id,
+        "timestamp": datetime.now().isoformat(),
+        "node": node,
+        "call_type": call_type,
+        "input_len": input_len,
+        "output_len": output_len,
+        "latency_ms": round(latency_ms, 1),
+        "success": success,
+        "error": error
+    }
+    _session_log.append(entry)
+    if CONFIG["LOGGING"]["ENABLED"]:
+        log_file = os.path.join(CONFIG["LOGGING"]["DIR"], f"{_session_id}.jsonl")
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+def print_session_stats():
+    if not _session_log:
+        print("\n[统计] 本次会话无日志记录")
+        return
+    total = len(_session_log)
+    success = sum(1 for e in _session_log if e["success"])
+    latencies = [e["latency_ms"] for e in _session_log]
+    avg_latency = sum(latencies) / len(latencies)
+    elapsed = time.time() - _session_start
+
+    print("\n" + "="*30 + " 会话统计 " + "="*30)
+    print(f"  会话ID:     {_session_id}")
+    print(f"  总调用数:   {total}")
+    print(f"  成功:       {success}  |  失败: {total - success}")
+    print(f"  平均延迟:   {avg_latency:.0f}ms  |  最长: {max(latencies):.0f}ms")
+    print(f"  会话耗时:   {elapsed:.1f}s")
+    print("-"*40)
+    by_node = defaultdict(lambda: {"calls": 0, "success": 0, "total_latency": 0.0})
+    for e in _session_log:
+        n = e["node"]
+        by_node[n]["calls"] += 1
+        if e["success"]:
+            by_node[n]["success"] += 1
+        by_node[n]["total_latency"] += e["latency_ms"]
+    for node, stats in sorted(by_node.items()):
+        avg = stats["total_latency"] / stats["calls"]
+        print(f"  [{node}] {stats['calls']}次 | 成功{stats['success']} | 平均{avg:.0f}ms")
+    print("="*70)
+
+def show_historical_stats(log_dir: str = None):
+    import glob
+    if log_dir is None:
+        log_dir = CONFIG["LOGGING"]["DIR"]
+    files = glob.glob(os.path.join(log_dir, "*.jsonl"))
+    if not files:
+        print("无历史日志")
+        return
+
+    all_entries = []
+    for fpath in files:
+        with open(fpath, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    all_entries.append(json.loads(line))
+
+    sessions = defaultdict(list)
+    for e in all_entries:
+        sessions[e["session"]].append(e)
+
+    print(f"\n历史统计 — {len(files)} 个日志文件, {len(sessions)} 个会话\n")
+    for sid, entries in sessions.items():
+        total = len(entries)
+        success = sum(1 for e in entries if e["success"])
+        latencies = [e["latency_ms"] for e in entries]
+        avg_lat = sum(latencies) / len(latencies) if latencies else 0
+        print(f"  [{sid}] {total}次调用 | 成功率 {success/total*100:.0f}% | 平均 {avg_lat:.0f}ms")
+
+def quality_check_openai(text: str) -> Tuple[bool, str]:
+    """直接调用 OpenAI API 进行输出质量检查，返回 (是否通过, 修改建议)"""
+    cfg = CONFIG["OPENAI"]
+    url = f"{cfg['BASE_URL'].rstrip('/')}/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {cfg['API_KEY']}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": cfg["MODEL"],
+        "temperature": 0.3,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "你是一个专业的输出质量审核员。请严格检查以下文本是否满足所有质量要求。\n\n"
+                    "质量检查标准：\n"
+                    "1. 语言自然流畅，没有生硬的机翻感或AI口癖（如\"总的来说\"、\"综上所述\"等）\n"
+                    "2. 不包含未翻译的英文代码、变量名、函数名或乱码（日语原文除外，♡等特殊符号除外）\n"
+                    "3. 回答完整、逻辑通顺，没有明显的逻辑错误、事实错误或前后矛盾\n"
+                    "4. 回答内容准确切题，没有编造虚假信息或答非所问\n"
+                    "5. 格式清晰易读，没有多余的JSON结构残留\n\n"
+                    "请严格按照以下JSON格式输出检查结果（只输出JSON，不要包含markdown代码块标记）：\n"
+                    '{"pass":true,"feedback":""}\n\n'
+                    "如果文本未通过检查（pass为false），feedback必须包含：\n"
+                    "- 具体指出哪里有问题\n"
+                    "- 明确说明应该如何修改\n\n"
+                    "注意：\n"
+                    "- pass为true时feedback必须为空字符串\"\"\n"
+                    "- pass为false时feedback必须包含具体、可操作的修改建议\n"
+                    "- 只输出JSON，不要输出任何其他内容"
+                )
+            },
+            {
+                "role": "user",
+                "content": text
+            }
+        ]
+    }
+
+    t0 = time.time()
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        body = response.json()
+        raw = body["choices"][0]["message"]["content"].strip()
+        if raw.startswith("```"):
+            raw = re.sub(r"```\w*\n?", "", raw).replace("```", "").strip()
+        result = json.loads(raw)
+        passed = result.get("pass", False)
+        feedback = result.get("feedback", "")
+        _log_api("QUALITY_CHECK", "openai", len(text), (time.time()-t0)*1000, True, len(raw))
+        return passed, feedback
+    except Exception as e:
+        _log_api("QUALITY_CHECK", "openai", len(text), (time.time()-t0)*1000, False, 0, str(e))
+        print(f"[!] 质检API调用或解析失败: {e}")
+        return True, ""
 
 def quality_check_openai(text: str) -> Tuple[bool, str]:
     """直接调用 OpenAI API 进行输出质量检查，返回 (是否通过, 修改建议)"""
@@ -340,16 +523,16 @@ def run_workflow(user_input: str):
     parser_out = call_dify_workflow("LLM_PARSER", {"text": combined_input})
     raw_json_text = parser_out.get("text", "")
 
-    # 提取字段 (保持原逻辑)
+    # 提取字段 
     field_chat = extract_json_field(raw_json_text, "聊天")
     field_code = extract_json_field(raw_json_text, "代码")
     field_logic = extract_json_field(raw_json_text, "需要逻辑推理")
 
-    # --- 步骤5: 补救逻辑 (并行转串行) (保持原判定逻辑) ---
+    # --- 步骤5: 分类处理  ---
     final_results = {}
     task_type = 'chat'  # 默认任务类型
 
-    # 5.1 聊天 (保持原判定)
+    # 5.1 聊天 
     if "未找到聊天字段" in field_chat:
         final_results["chat"] = field_chat
     else:
@@ -358,7 +541,7 @@ def run_workflow(user_input: str):
         final_results["chat"] = res.get("text", "")
         task_type = 'chat'
 
-    # 5.2 码码 (保持原判定)
+    # 5.2 码码 
     if "未找到聊天字段" in field_code:
         final_results["code"] = field_code
     else:
@@ -370,7 +553,7 @@ def run_workflow(user_input: str):
         if memory_system:
             memory_system.update_task_context('code', {'input': field_code, 'output': res.get("text", "")})
 
-    # 5.3 来硬的 (逻辑) (保持原判定)
+    # 5.3 来硬的 (逻辑) 
     if "未找到聊天字段" in field_logic:
         final_results["logic"] = field_logic
     else:
@@ -379,7 +562,7 @@ def run_workflow(user_input: str):
         final_results["logic"] = res.get("text", "")
         task_type = 'logic'
 
-    # --- 步骤6: 变量聚合 (保持原逻辑) ---
+    # --- 步骤6: 变量聚合  ---
     aggregated_text = json.dumps(final_results, ensure_ascii=False)
 
     # --- 步骤7: 润色 LLM ---
@@ -387,7 +570,7 @@ def run_workflow(user_input: str):
     polish_out = call_dify_workflow("LLM_POLISH", {"text": aggregated_text})
     final_answer = polish_out.get("text", "润色失败，无结果。")
 
-    # --- 步骤7.5: 质检 & 打回重试---
+    # --- 步骤7.5: 质检 & 打回重试 ---
     MAX_RETRY = 3
     for attempt in range(MAX_RETRY):
         print(f"[*] 正在进行第{attempt+1}次质量检查...")
@@ -419,20 +602,33 @@ def run_workflow(user_input: str):
         memory_system.add_to_history(user_input, final_answer, task_type)
 
 # ==========================================
-# 4. 入口 
+# 4. 入口
 # ==========================================
 if __name__ == "__main__":
-    # 初始化记忆系统
+    import sys
+
+    if "--stats" in sys.argv:
+        show_historical_stats()
+        sys.exit(0)
+
     user_id = "default_user"
     session_id = f"session_{int(time.time())}"
+    _log_init(session_id)
+
     memory_system = SimpleMemorySystem(user_id, session_id)
-    
-    print(f"系统已启动 (用户: {user_id})")
-    
-    while True:
-        query = input("\n请输入问题 (输入 exit 退出): ")
-        if query.lower() == 'exit':
-            break
-        if not query.strip():
-            continue
-        run_workflow(query)
+
+    print(f"系统已启动 (用户: {user_id}, 会话: {session_id})")
+    print("输入 --stats 作为参数可查看历史日志统计")
+
+    try:
+        while True:
+            query = input("\n请输入问题 (输入 exit 退出): ")
+            if query.lower() == 'exit':
+                break
+            if not query.strip():
+                continue
+            run_workflow(query)
+    finally:
+        print_session_stats()
+        if memory_system:
+            memory_system._save_memory()

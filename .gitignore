@@ -1,8 +1,26 @@
-# API 密钥 —— 填了真的就别传
+# 敏感文件
 config.json
 
-# 运行产物
-logs/
-memory_store/
-*.pyc
+# Python
 __pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# 运行时生成
+memory_store/
+logs/
+*.log
+*.jsonl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

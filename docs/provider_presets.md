@@ -39,11 +39,11 @@
 | `openai` | 原生 | gpt-4.1-mini | gpt-4.1 |
 | `google` | 原生 | gemini-2.5-flash | gemini-2.5-pro |
 | `anthropic` | 原生 | claude-sonnet-4 | claude-sonnet-4 |
-| `deepseek` | OpenAI兼容 | deepseek-chat(V3) | deepseek-chat(V3) |
+| `deepseek` | OpenAI兼容 | deepseek-v4-flash | deepseek-v4-pro |
 | `zhipu` | OpenAI兼容 | glm-4-flash | glm-4-flash |
 | `qwen` | OpenAI兼容 | qwen-turbo | qwen-plus |
 | `moonshot` | OpenAI兼容 | moonshot-v1-8k | moonshot-v1-8k |
-| `siliconflow` | OpenAI兼容 | DeepSeek-V3 | DeepSeek-V3 |
+| `siliconflow` | OpenAI兼容 | DeepSeek-V4-Flash | DeepSeek-V4-Pro |
 | `custom` | OpenAI兼容 | (需自行填写) | (需自行填写) |
 
 ## 如何添加新供应商
@@ -63,6 +63,6 @@
 }
 ```
 
-## 为什么 DeepSeek 没区分轻活重活
+## 为什么 DeepSeek 区分轻活重活
 
-DeepSeek V3 的能力已经足够强，日常轻活不需要单独降级模型。如果后续要加 R1 做深度推理处理代码/逻辑节点，只需把 `code` 和 `logic` 改成 `deepseek-reasoner`。
+DeepSeek V4 有 Flash（轻量）和 Pro（强推理）两个版本。轻活（classifier/parser/chat/polish/persona/quality/reviewer/aggregator/search_judge）走 `deepseek-v4-flash`，重活（code/logic/planner/task_router）走 `deepseek-v4-pro`。如需开启 reasoning，仅在 Pro 模型上启用。

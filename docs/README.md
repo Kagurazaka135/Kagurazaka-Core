@@ -1,59 +1,81 @@
-# Kagurazaka Core — 纯 Python 版架构说明
+# Kagurazaka Core — 纯 Python 版架构详解
 
 ## 一句话总结
-用户输入 → 判断要不要联网搜索 → 拆成「聊天/代码/逻辑」三类 → 分别交给 LLM 处理 → 聚合结果 → 润色输出 → 质检打回重试
+
+用户输入 → L1+L2 搜索信号检测 → Search Judge (LLM) → 搜索+缓存+质检 → 工具调用循环 → Task Router → simple/complex 双路径 → 人格注入 → 输出
 
 ## 文件职责速查
 
 | 文件 | 一句话 | 被谁依赖 |
 |---|---|---|
-| `main.py` | CLI 入口，命令行交互 | 依赖所有 |
-| `core.py` | 工作流编排大管家，串联所有节点 | 依赖 llm/memory/search/quality/logger |
-| `config.py` | 读 config.json，支持简单/高级两种模式 | 被几乎所有文件依赖 |
-| `provider_presets.py` | 9 个 LLM 供应商的内置模型映射表 | 被 config.py 依赖 |
-| `llm.py` | 统一 LLM 调用，对接 OpenAI/Gemini/Claude 三种 API | 被 core.py/quality.py/webui.py 依赖 |
-| `prompts.py` | 所有 7 个节点的 system prompt，含 `[PLACEHOLDER]` 标记 | 被 llm.py 依赖 |
-| `memory.py` | 会话记忆：上下文追踪 + 话题关联 + 长期记忆持久化 | 被 core.py 依赖 |
-| `search.py` | Google 搜索（SerpAPI），为实时问题提供上下文 | 被 core.py 依赖 |
-| `quality.py` | 输出质量检查，最多重试 3 次，不合格打回润色 | 被 core.py 依赖 |
-| `logger.py` | 会话日志 + 统计，`--stats` 查看历史 | 被 core.py 依赖 |
-| `webui.py` | Gradio 网页前端，聊天界面 + 设置面板 | 同 main.py，加 gradio 依赖 |
+| `main.py` | CLI 入口，交互循环 | 依赖所有 |
+| `core.py` | 工作流编排大管家 | 依赖 llm/memory/search/quality/logger/tools |
+| `config.py` | 读 config.json，简单/高级双模式 | 被几乎所有文件依赖 |
+| `provider_presets.py` | 9 个供应商的模型映射表 | 被 config.py 依赖 |
+| `llm.py` | 统一 LLM 客户端，三协议+JSON提取+输出清理 | 被 core.py/quality.py 依赖 |
+| `prompts.py` | 全 14 个节点的 system prompt | 被 llm.py 依赖 |
+| `memory.py` | 会话记忆：上下文追踪+话题关联+搜索缓存+长期记忆 | 被 core.py 依赖 |
+| `search.py` | SerpAPI 搜索（Google+Bing fallback） | 被 core.py 依赖 |
+| `quality.py` | simple 路径质检，≤3 轮打回 | 被 core.py 依赖 |
+| `tools.py` | Function Calling 工具注册表，5 个内置工具 | 被 core.py/llm.py 依赖 |
+| `logger.py` | 会话日志+统计，`--stats` 查看 | 被 core.py/llm.py 依赖 |
+| `fallback.py` | 指数退避重试+模型切换+优雅降级 | 各级调用方 |
+| `_path.py` | PyInstaller 打包兼容，工作目录定位 | 被 main.py 依赖 |
 
 ## 数据流向图
 
 ```
-用户输入 (main.py / webui.py)
+用户输入 (main.py)
     │
     ▼
 [core.py] run_workflow()
     │
-    ├─1. 记忆增强 (memory.py)          检测"刚才那个..."等上下文引用
+    ├─ 记忆增强 (memory.py)           "刚才那个..." → 捞出上文
     │
-    ├─2. 分类器 (llm.py → classifier)  判断要不要搜索
+    ├─ L1 白名单                      20+ 闲聊短语，命中跳过搜索
+    │
+    ├─ L2 正则                        5 组正则，命中跳过 Search Judge
+    │
+    ├─ Search Judge (llm.py)          判断要不要搜索 + 生成搜索词
     │       │
-    │       ├─ 需要搜索 → search.py     Google 搜索
-    │       └─ 不需要   → 跳过
+    │       ├─ 需要 → search.py       Google → 缓存 → 质量检查 → 换词重搜
+    │       └─ 不需要 → 跳过
     │
-    ├─3. 解析器 (llm.py → parser)      把输入拆成 JSON:
-    │    {聊天:"...", 代码:"...", 逻辑:"..."}
+    ├─ 工具调用循环 (tools.py)         ≤5 轮：search_web/read_file/write_file/
+    │       │                          get_datetime/http_get
+    │       ├─ 有最终答案 → 跳过 Task Router
+    │       └─ 无最终答案 → 继续
     │
-    ├─4. 并行处理
-    │   ├─ 聊天 (llm.py → chat)        Gemini (可换)
-    │   ├─ 代码 (llm.py → code)        Claude (可换)
-    │   └─ 逻辑 (llm.py → logic)       GPT-4  (可换)
+    ├─ Task Router (llm.py)           判断 simple/complex
+    │       │
+    │       ├─ simple → chat/code/logic → polish → quality_check (≤3轮)
+    │       │
+    │       └─ complex → 按 steps[] 执行 → aggregator → reviewer (≤3轮)
     │
-    ├─5. 变量聚合                       三个结果拼成 JSON
+    ├─ 人格注入 (llm.py)              可选：kagurazaka / custom
     │
-    ├─6. 润色 (llm.py → polish)         JSON → 自然语言
-    │
-    └─7. 质检 (quality.py)              不通过 → 带反馈打回步骤6重试
-                最多3次
+    └─ 记忆保存 (memory.py)           写入会话历史+长期记忆
     │
     ▼
   最终输出
 ```
 
-## config.json 的两种模式
+## 双路径设计
+
+| | simple | complex |
+|---|---|---|
+| 触发条件 | Task Router 判定简单 | Task Router 判定需要多步 |
+| 执行方式 | 单 chat/code/logic + polish + QC | 多步按 steps[] 顺序执行 |
+| 聚合 | polish 直接润色 JSON | aggregator 整合多步结果 |
+| 评审 | 无（由 QC 替代） | reviewer ≤3 轮，不通过追加 missing_steps |
+| 适用 | 日常对话、短回答、简单代码 | 长报告、多步推理、跨领域任务 |
+
+## 为什么 L1+L2 不用 LLM
+
+50%+ 搜索意图可由正则/关键词识别。LLM 调用有 500ms-3s 延迟，L1+L2 为零成本拦截。
+L1 白名单处理"谢谢""好的""再见"等纯闲聊，L2 正则处理"今天天气""最新新闻"等强搜索信号。
+
+## config.json 两种模式
 
 ### 简单模式（推荐，只填 3 项）
 ```json
@@ -63,21 +85,20 @@
     "LLM_BASE_URL": ""
 }
 ```
-选了供应商后，系统自动从 `provider_presets.py` 给 7 个节点配好模型。
+选了供应商后自动从 `provider_presets.py` 配好所有节点。
 
-### 高级模式（手动控制每个节点用什么模型）
+### 高级模式（手动控制每个节点）
 ```json
 {
     "PROVIDERS": {
         "google": {"api_key": "...", "base_url": "..."},
-        "openai": {"api_key": "...", "base_url": "..."}
+        "anthropic": {"api_key": "...", "base_url": "..."}
     },
     "MODELS": {
-        "classifier": {"provider": "google", "model": "gemini-2.5-flash"},
-        "code":      {"provider": "openai", "model": "gpt-4"}
+        "chat": {"provider": "google", "model": "gemini-2.5-flash"},
+        "code": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
     }
 }
 ```
 
-### 两种模式自动识别
-`config.py` 启动时检查：有 `LLM_PROVIDER` → 走简单模式；否则走高级模式。可以随时切换，互不冲突。
+两种模式自动识别：有 `LLM_PROVIDER` → 简单模式；否则 → 高级模式。

@@ -25,20 +25,20 @@ _DEFAULT_CONFIG: Dict = {
         "anthropic": {"api_key": "", "base_url": "https://api.anthropic.com"}
     },
     "MODELS": {
-        "classifier":         {"provider": "google",    "model": "gemini-2.5-flash"},
-        "parser":             {"provider": "google",    "model": "gemini-2.5-flash"},
-        "chat":               {"provider": "google",    "model": "gemini-2.5-flash"},
-        "code":               {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
-        "logic":              {"provider": "openai",    "model": "gpt-4"},
-        "polish":             {"provider": "google",    "model": "gemini-2.5-flash"},
-        "persona_kagurazaka": {"provider": "openai",    "model": "deepseek-v4-flash"},
-        "persona_custom":     {"provider": "openai",    "model": "deepseek-v4-flash"},
-        "quality_check":      {"provider": "openai",    "model": "gpt-4.1-mini"},
-        "planner":            {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
-        "reviewer":           {"provider": "google",    "model": "gemini-2.5-flash"},
-        "aggregator":         {"provider": "google",    "model": "gemini-2.5-flash"},
-        "search_judge":       {"provider": "google",    "model": "gemini-2.5-flash"},
-        "task_router":        {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+        "classifier":         {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
+        "parser":             {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
+        "chat":               {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
+        "code":               {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "fallback_provider": None, "fallback_model": None},
+        "logic":              {"provider": "openai",    "model": "gpt-4",              "fallback_provider": None, "fallback_model": None},
+        "polish":             {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
+        "persona_kagurazaka": {"provider": "openai",    "model": "deepseek-chat",      "fallback_provider": None, "fallback_model": None},
+        "persona_custom":     {"provider": "openai",    "model": "deepseek-chat",      "fallback_provider": None, "fallback_model": None},
+        "quality_check":      {"provider": "openai",    "model": "gpt-4.1-mini",       "fallback_provider": None, "fallback_model": None},
+        "planner":            {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "fallback_provider": None, "fallback_model": None},
+        "reviewer":           {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
+        "aggregator":         {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
+        "search_judge":       {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
+        "task_router":        {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "fallback_provider": None, "fallback_model": None}
     },
     "LOGGING": {"ENABLED": True, "DIR": "./logs/"}
 }

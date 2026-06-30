@@ -3,17 +3,18 @@
 整合所有 Dify 工作流节点逻辑为纯 Python 实现
 
 新流程:
-  L1白名单 → L2正则 → Search Judge(LLM) → 搜索(含缓存) → Task Router(LLM) → simple/complex
+  L1白名单 → L2正则 → Search Judge(LLM) → 搜索(含缓存) → 工具调用循环 → Task Router(LLM) → simple/complex
 """
 import json
 import re
 import time
 from typing import Dict
 
-from llm import call_node, call_llm, safe_extract_json
+from llm import call_node, call_llm, safe_extract_json, extract_and_validate, call_llm_with_tools
 from memory import SimpleMemorySystem
 from search import google_search
 from quality import quality_check
+from tools import has_tool_calls, extract_tool_calls, execute_tool, format_tool_result
 import logger as log
 import config as cfg
 
@@ -57,8 +58,13 @@ def _search_intent_regex(text: str):
     return False, ""
 
 
-def _extract_json_field(raw_text: str, field_name: str):
-    data = safe_extract_json(raw_text)
+def _extract_json_field(raw_text: str, field_name: str, schema_name: str = None):
+    if schema_name:
+        data, err = extract_and_validate(raw_text, schema_name)
+    else:
+        data = safe_extract_json(raw_text)
+    if data is None:
+        return _FIELD_NOT_FOUND
     return data.get(field_name, _FIELD_NOT_FOUND)
 
 
@@ -101,11 +107,20 @@ def _run_workflow_impl(user_input: str, memory_system: SimpleMemorySystem) -> st
             # ---- Search Judge ----
             print("[Search Judge] 判断搜索意图...")
             t0 = time.time()
+            judge_data = None
             try:
                 judge_raw = call_node("search_judge", enhanced_input)
-                judge_data = safe_extract_json(judge_raw)
-                is_search_needed = judge_data.get("search_needed", False)
-                search_query = judge_data.get("search_query", "") or user_input
+                judge_data, schema_err = extract_and_validate(judge_raw, "search_judge")
+                if schema_err and judge_data is not None:
+                    # schema 校验失败，重试一次
+                    retry_prompt = f"你上次输出的JSON格式有误：{schema_err}\n原始输出：{judge_raw}\n请严格按照格式重新输出JSON。"
+                    try:
+                        judge_raw2 = call_node("search_judge", retry_prompt)
+                        judge_data, _ = extract_and_validate(judge_raw2, "search_judge")
+                    except Exception:
+                        pass
+                is_search_needed = judge_data.get("search_needed", False) if judge_data else False
+                search_query = (judge_data.get("search_query", "") if judge_data else "") or user_input
                 log.record("search_judge", "llm", len(enhanced_input),
                            (time.time() - t0) * 1000, True, len(judge_raw))
                 print(f"[Search Judge] search_needed={is_search_needed}, query={search_query}")
@@ -119,35 +134,122 @@ def _run_workflow_impl(user_input: str, memory_system: SimpleMemorySystem) -> st
     # ---- 搜索（含缓存） ----
     search_context = _resolve_search(search_query, memory_system, is_search_needed)
 
+    # ---- 工具调用循环 ----
+    tool_final_answer = None
+    if search_context:
+        tool_messages = [
+            {"role": "system", "content": "你是Kagurazaka，一个能使用工具的AI助手。当需要获取实时信息、读取文件、获取时间等操作时，请调用对应工具。如果不需要工具，直接回复用户的问题。"},
+            {"role": "user", "content": f"用户请求: {enhanced_input}\n\n搜索结果: {search_context[:2000]}"}
+        ]
+    else:
+        tool_messages = [
+            {"role": "system", "content": "你是Kagurazaka，一个能使用工具的AI助手。当需要获取实时信息、读取文件、获取时间等操作时，请调用对应工具。如果不需要工具，直接回复用户的问题。"},
+            {"role": "user", "content": f"用户请求: {enhanced_input}"}
+        ]
+
+    MAX_TOOL_ROUNDS = 5
+    for tool_round in range(MAX_TOOL_ROUNDS):
+        try:
+            response = call_llm_with_tools(tool_messages)
+        except Exception as e:
+            print(f"[工具调用] 第{tool_round+1}轮调用失败: {e}")
+            break
+
+        if isinstance(response, str):
+            # LLM 直接返回文本，没有工具调用
+            tool_final_answer = response
+            print(f"[工具调用] LLM直接回答，未调用工具")
+            break
+
+        if not has_tool_calls(response):
+            # 返回的是 dict 但没有 tool_calls，提取 content
+            if isinstance(response, dict):
+                msg = response.get("choices", [{}])[0].get("message", {})
+                tool_final_answer = msg.get("content", "")
+            print(f"[工具调用] 无工具调用，结束循环")
+            break
+
+        calls = extract_tool_calls(response)
+        print(f"[工具调用] 第{tool_round+1}轮，{len(calls)}个工具调用")
+        assistant_msg = response["choices"][0]["message"]
+        tool_messages.append({
+            "role": "assistant",
+            "content": assistant_msg.get("content") or "",
+            "tool_calls": assistant_msg.get("tool_calls")
+        })
+
+        for tc in calls:
+            func_name = tc["function"]["name"]
+            try:
+                func_args = json.loads(tc["function"]["arguments"])
+            except json.JSONDecodeError:
+                func_args = {}
+            print(f"[工具调用] → {func_name}({json.dumps(func_args, ensure_ascii=False)[:100]})")
+            result = execute_tool(func_name, func_args)
+            tool_messages.append(format_tool_result(tc["id"], func_name, result))
+
+        # 最后一轮强制要求回答
+        if tool_round == MAX_TOOL_ROUNDS - 1:
+            tool_messages.append({"role": "user", "content": "请根据以上工具调用结果，用中文给出最终回答。不要再调用工具了。"})
+            try:
+                response = call_llm_with_tools(tool_messages)
+                if isinstance(response, str):
+                    tool_final_answer = response
+                elif isinstance(response, dict):
+                    tool_final_answer = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            except Exception as e:
+                print(f"[工具调用] 最终回答生成失败: {e}")
+            break
+
     # ---- Task Router ----
-    print("[Task Router] 判断复杂度并拆解任务...")
-    router_input = json.dumps({
-        "user_request": enhanced_input,
-        "search_results": search_context[:2000] if search_context else ""
-    }, ensure_ascii=False)
-    t0 = time.time()
-    try:
-        router_raw = call_node("task_router", router_input)
-        router_data = safe_extract_json(router_raw)
-        complexity = router_data.get("complexity", "simple")
-        log.record("task_router", "llm", len(router_input),
-                   (time.time() - t0) * 1000, True, len(router_raw))
-        print(f"[Task Router] complexity={complexity}")
-    except Exception as e:
-        print(f"[!] Task Router 调用失败: {e}")
-        router_data = {"complexity": "simple", "chat_task": enhanced_input, "code_task": None, "logic_task": None}
-        complexity = "simple"
-        log.record("task_router", "llm", len(router_input),
-                   (time.time() - t0) * 1000, False, 0, str(e))
+    if tool_final_answer:
+        # 工具调用已产生最终答案，跳过 Task Router
+        print("[*] 工具调用已产生最终答案，跳过Task Router")
+        final_answer = tool_final_answer
+        # 直接进入人格注入阶段
+        task_type = "chat"
+        router_data = None
+        complexity = None
+        skip_router = True
+    else:
+        skip_router = False
+        print("[Task Router] 判断复杂度并拆解任务...")
+        router_input = json.dumps({
+            "user_request": enhanced_input,
+            "search_results": search_context[:2000] if search_context else ""
+        }, ensure_ascii=False)
+        t0 = time.time()
+        router_data = None
+        try:
+            router_raw = call_node("task_router", router_input)
+            router_data, schema_err = extract_and_validate(router_raw, "task_router")
+            if schema_err and router_data is not None:
+                retry_prompt = f"你上次输出的JSON格式有误：{schema_err}\n原始输出：{router_raw}\n请严格按照格式重新输出JSON。"
+                try:
+                    router_raw2 = call_node("task_router", retry_prompt)
+                    router_data, _ = extract_and_validate(router_raw2, "task_router")
+                except Exception:
+                    pass
+            complexity = router_data.get("complexity", "simple") if router_data else "simple"
+            log.record("task_router", "llm", len(router_input),
+                       (time.time() - t0) * 1000, True, len(router_raw))
+            print(f"[Task Router] complexity={complexity}")
+        except Exception as e:
+            print(f"[!] Task Router 调用失败: {e}")
+            router_data = {"complexity": "simple", "chat_task": enhanced_input, "code_task": None, "logic_task": None}
+            complexity = "simple"
+            log.record("task_router", "llm", len(router_input),
+                       (time.time() - t0) * 1000, False, 0, str(e))
 
     # ---- 路由 ----
-    if complexity == "complex":
-        print("[*] → 走复杂路径")
-        final_answer = _run_complex_workflow(enhanced_input, search_context, router_data, memory_system)
-        task_type = "complex"
-    else:
-        print("[*] → 走简单路径")
-        final_answer, task_type = _run_simple_workflow(router_data, memory_system)
+    if not skip_router:
+        if complexity == "complex":
+            print("[*] → 走复杂路径")
+            final_answer = _run_complex_workflow(enhanced_input, search_context, router_data, memory_system)
+            task_type = "complex"
+        else:
+            print("[*] → 走简单路径")
+            final_answer, task_type = _run_simple_workflow(router_data, memory_system)
 
     # ---- 人格注入 ----
     persona_mode = cfg.CONFIG.get("PERSONA_MODE", "none")
@@ -216,8 +318,8 @@ def _resolve_search(search_query: str, memory_system, is_search_needed: bool) ->
                 "search_results": results[:1200]
             }, ensure_ascii=False)
             qc_raw = call_node("search_quality_check", qc_input)
-            qc_data = safe_extract_json(qc_raw)
-            if not qc_data.get("quality_ok", True):
+            qc_data, _ = extract_and_validate(qc_raw, "search_quality_check")
+            if not qc_data.get("quality_ok", True) if qc_data else True:
                 quality_ok = False
                 retry_reason = qc_data.get("reason", "")
                 retry_query = qc_data.get("retry_query", "")
@@ -409,7 +511,9 @@ def _run_complex_workflow(user_input: str, search_context: str,
         t0 = time.time()
         try:
             review_raw = call_node("reviewer", review_input)
-            review = safe_extract_json(review_raw)
+            review, _ = extract_and_validate(review_raw, "reviewer")
+            if review is None:
+                review = {"pass": True}
             log.record("reviewer", "llm", len(review_input),
                        (time.time() - t0) * 1000, True, len(review_raw))
         except Exception as e:

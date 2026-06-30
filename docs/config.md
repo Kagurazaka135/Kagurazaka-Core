@@ -14,44 +14,34 @@
 ## 自动识别逻辑
 
 ```python
-def _load_config():
-    ...
-    if "LLM_PROVIDER" in user_cfg and user_cfg["LLM_PROVIDER"]:
-        _apply_simple_mode(config, user_cfg)   # 走简单模式
-    else:
-        _apply_advanced_mode(config, user_cfg)  # 走高级模式
+if "LLM_PROVIDER" in user_cfg and user_cfg["LLM_PROVIDER"]:
+    _apply_simple_mode(config, user_cfg)   # 走简单模式
+else:
+    _apply_advanced_mode(config, user_cfg)  # 走高级模式
 ```
 
 ## 简单模式做了什么
 
-```python
-def _apply_simple_mode(config, user_cfg):
-    preset = get_preset(provider_name)          # 查预设表
-    internal_provider = preset["internal_provider"]  # openai/google/anthropic
+1. 查 `provider_presets.py` 获取预设（`get_preset(provider_name)`）
+2. 将用户的一个 API key 填进 `PROVIDERS`
+3. 将全部 14 个节点指向该供应商，模型名从预设拿
+4. `MODEL_OVERRIDES` 可覆盖单个节点的模型名
 
-    # 把用户的一个 API key 填进 PROVIDERS
-    config["PROVIDERS"][internal_provider] = {"api_key": ..., "base_url": ...}
-
-    # 把 7 个节点全部指向这个供应商，模型名从预设拿
-    for node in ["classifier", "parser", ...]:
-        config["MODELS"][node] = {
-            "provider": internal_provider,
-            "model": preset["models"][node]       # 可被 MODEL_OVERRIDES 覆盖
-        }
-```
-
-简单模式的本质：**帮用户把 3 行配置展开成高级模式的完整结构**。对下游代码（`llm.py`、`core.py`）来说，不管用户用哪种模式，看到的 `CONFIG` 结构都是一样的。
+本质：**把 3 行配置展开成高级模式的完整结构**。下游代码看到的 `CONFIG` 结构一致。
 
 ## 高级模式做了什么
 
-```python
-def _apply_advanced_mode(config, user_cfg):
-    # 合并用户写的 PROVIDERS（覆盖 api_key 和 base_url）
-    # 合并用户写的 MODELS（覆盖每个节点的 provider 和 model）
-```
+手动合并 `PROVIDERS` 和 `MODELS` 字段，无自动推断。
 
-只是简单的字段合并，什么都不自动推断。
+## 配置校验
+
+- `MODEL_OVERRIDES` 校验：检查节点名拼写（不在 `VALID_NODE_NAMES` 里的提示"你是指 xxx 吗？"）
+- 高级模式 `MODELS` 校验：检查 provider 是否在 `(openai, google, anthropic)` 中，模型名是否包含空格（拼写错误？）
+
+## 配置迁移
+
+`_migrate_config()` 自动补齐旧版 config.json 缺失的字段（`SERPAPI_KEY`、`PERSONA_MODE`、`MODEL_OVERRIDES`），无需手动改。
 
 ## 模板生成
 
-首次运行没有 `config.json` 时，生成一个带中文注释的模板。模板默认是简单模式格式。
+首次运行没有 `config.json` 时，生成带中文注释的模板，默认简单模式格式。

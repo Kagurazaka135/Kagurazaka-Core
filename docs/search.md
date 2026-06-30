@@ -1,34 +1,27 @@
-# search.py — Google 搜索
+# search.py — 网络搜索模块
 
-**只有被分类器判定"需要搜索"时才触发。**
+**只有 Search Judge 判定需要搜索时才触发。** Google 主引擎 + Bing fallback。
 
 ## 逻辑
 
 ```python
 def google_search(query: str) -> str:
-    serpapi_key = CONFIG.get("SERPAPI_KEY", "")
-    if not serpapi_key:  return ""    # 没配就不搜
-
-    # 调 SerpAPI
-    response = requests.get("https://serpapi.com/search", params={...})
-
-    # 取前 5 条结果的摘要
-    snippets = [res["snippet"] for res in results["organic_results"][:5]]
-    return "\n".join(snippets)
+    # 1. 检查 SERPAPI_KEY 是否配置
+    # 2. 主引擎：Google (SerpAPI)
+    # 3. 失败 → Bing fallback (同一 SerpAPI key)
+    # 4. 取前 5 条结果的摘要
+    # 5. 返回 "\n".join(snippets)
 ```
 
-## 搜索结果去哪了
+## 在 core.py 里的位置
 
-`core.py` 里拼到解析器的输入里：
-
-```python
-combined_input = f"搜索结果：{search_context}\n用户问题：{enhanced_input}"
+```
+Search Judge → google_search(query) → 搜索缓存 → 质量检查 → 换词重搜
 ```
 
-所以"干饭人"（解析器）看到的是带搜索上下文的完整问题，能做出更准确的分类。
+搜索结果和搜索词一起存入 `memory.py` 的缓存（30min TTL）。
+质量不足时 LLM 给出新搜索词，自动重搜一次。
 
 ## 为什么用 SerpAPI 而不是直接爬 Google
 
-直接爬 Google 需要处理反爬、验证码、IP 封禁。SerpAPI 付费用 API 调，稳定省心。免费套餐 100 次/月，够开发用。
-
-不配 `SERPAPI_KEY` 也不影响使用——分类器判定不需要搜索的问题照常走。
+直接爬 Google 需要处理反爬、验证码、IP 封禁。SerpAPI 走 API，稳定。不配 `SERPAPI_KEY` 不影响使用——Search Judge 判定不需要搜索的问题照常走。

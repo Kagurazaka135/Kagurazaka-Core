@@ -28,6 +28,7 @@ PRESETS: Dict[str, Preset] = {
             "reviewer":           "gpt-4.1-mini",
             "aggregator":         "gpt-4.1-mini",
             "search_judge":       "gpt-4.1-mini",
+            "search_quality_check": "gpt-4.1-mini",  # 搜索结果质量检查，轻量任务同 search_judge
             "task_router":        "gpt-4.1"
         }
     },
@@ -49,6 +50,7 @@ PRESETS: Dict[str, Preset] = {
             "reviewer":           "gemini-2.5-flash",
             "aggregator":         "gemini-2.5-flash",
             "search_judge":       "gemini-2.5-flash",
+            "search_quality_check": "gemini-2.5-flash",  # 搜索结果质量检查，轻量任务同 search_judge
             "task_router":        "gemini-2.5-pro"
         }
     },
@@ -70,6 +72,7 @@ PRESETS: Dict[str, Preset] = {
             "reviewer":           "claude-sonnet-4-20250514",
             "aggregator":         "claude-sonnet-4-20250514",
             "search_judge":       "claude-sonnet-4-20250514",
+            "search_quality_check": "claude-sonnet-4-20250514",  # 搜索结果质量检查，轻量任务同 search_judge
             "task_router":        "claude-sonnet-4-20250514"
         }
     },
@@ -91,6 +94,7 @@ PRESETS: Dict[str, Preset] = {
             "reviewer":           "deepseek-v4-flash",
             "aggregator":         "deepseek-v4-flash",
             "search_judge":       "deepseek-v4-flash",
+            "search_quality_check": "deepseek-v4-flash",  # 搜索结果质量检查，轻量任务同 search_judge
             "task_router":        "deepseek-v4-pro"
         }
     },
@@ -112,6 +116,7 @@ PRESETS: Dict[str, Preset] = {
             "reviewer":           "glm-4-flash",
             "aggregator":         "glm-4-flash",
             "search_judge":       "glm-4-flash",
+            "search_quality_check": "glm-4-flash",  # 搜索结果质量检查，轻量任务同 search_judge
             "task_router":        "glm-4-flash"
         }
     },
@@ -133,6 +138,7 @@ PRESETS: Dict[str, Preset] = {
             "reviewer":           "qwen-turbo",
             "aggregator":         "qwen-turbo",
             "search_judge":       "qwen-turbo",
+            "search_quality_check": "qwen-turbo",  # 搜索结果质量检查，轻量任务同 search_judge
             "task_router":        "qwen-plus"
         }
     },
@@ -154,6 +160,7 @@ PRESETS: Dict[str, Preset] = {
             "reviewer":           "moonshot-v1-8k",
             "aggregator":         "moonshot-v1-8k",
             "search_judge":       "moonshot-v1-8k",
+            "search_quality_check": "moonshot-v1-8k",  # 搜索结果质量检查，轻量任务同 search_judge
             "task_router":        "moonshot-v1-8k"
         }
     },
@@ -175,6 +182,7 @@ PRESETS: Dict[str, Preset] = {
             "reviewer":           "deepseek-ai/DeepSeek-V4-Flash",
             "aggregator":         "deepseek-ai/DeepSeek-V4-Flash",
             "search_judge":       "deepseek-ai/DeepSeek-V4-Flash",
+            "search_quality_check": "deepseek-ai/DeepSeek-V4-Flash",  # 搜索结果质量检查，轻量任务同 search_judge
             "task_router":        "deepseek-ai/DeepSeek-V4-Pro"
         }
     },
@@ -196,6 +204,7 @@ PRESETS: Dict[str, Preset] = {
             "reviewer":           "",
             "aggregator":         "",
             "search_judge":       "",
+            "search_quality_check": "",  # 搜索结果质量检查，custom 模式需自行填写
             "task_router":        ""
         }
     }

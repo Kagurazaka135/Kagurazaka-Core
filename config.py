@@ -38,6 +38,8 @@ _DEFAULT_CONFIG: Dict = {
         "reviewer":           {"provider": "google",    "model": "gemini-2.5-flash"},
         "aggregator":         {"provider": "google",    "model": "gemini-2.5-flash"},
         "search_judge":       {"provider": "google",    "model": "gemini-2.5-flash"},
+        # 搜索结果质量检查：core.py 调用 call_node("search_quality_check")，结果不佳时换词重搜
+        "search_quality_check": {"provider": "google",    "model": "gemini-2.5-flash"},
         "task_router":        {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
     },
     "LOGGING": {"ENABLED": True, "DIR": "./logs/"}

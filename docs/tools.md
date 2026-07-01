@@ -1,23 +1,39 @@
-# tools.py — 工具注册表与 Function Calling 引擎
+# tools.py — 工具箱
 
-**让 LLM 能调用外部工具。** 注册 → 暴露 → 执行 → 返回。
+**让 LLM 能干活，不只是聊天。** 注册工具 → LLM 决定用哪个 → 执行 → 把结果还给 LLM。
 
 ## 5 个内置工具
 
-| 工具 | 功能 | 参数 |
-|------|------|------|
-| `search_web` | 搜索互联网 | `query` (必填) |
-| `read_file` | 读取本地文件 | `path` (必填) |
-| `write_file` | 写入本地文件 | `path`, `content` (必填) |
-| `get_datetime` | 获取当前日期时间 | 无 |
-| `http_get` | HTTP GET 请求 | `url` (必填, https://) |
+| 工具 | 干啥的 | 参数 |
+|---|---|---|
+| `search_web` | 搜网页 | query（搜什么） |
+| `read_file` | 读本地文件 | path（文件路径） |
+| `write_file` | 写本地文件 | path + content |
+| `get_datetime` | 拿当前日期时间 | 无参数 |
+| `http_get` | 发 HTTP GET 请求 | url（必须 https） |
 
-## 如何添加新工具
+## 是怎么工作的
+
+```
+LLM 收到你的问题 + 搜到的信息
+  → LLM 判断：我需要用工具吗？
+  → 需要 → 返回 tool_calls（比如 "我要 search_web，搜 XXX"）
+  → core.py 执行这个工具，拿到结果
+  → 把结果追加到对话历史，再问 LLM：还需要什么吗？
+  → 最多 5 轮
+  → 最后一轮强制 LLM 出最终回答（不能再要工具了）
+```
+
+## 文件安全
+
+读写文件不是随便哪个路径都能碰的。只允许在项目目录、用户目录、当前工作目录范围内操作。越界的直接拒绝。
+
+## 怎么加新工具
 
 ```python
 register_tool(
     name="my_tool",
-    description="工具描述",
+    description="这个工具干什么",
     parameters={
         "type": "object",
         "properties": {
@@ -25,32 +41,8 @@ register_tool(
         },
         "required": ["param1"]
     },
-    function=my_tool_function
+    function=my_tool_function  # 实际执行的 Python 函数
 )
 ```
 
-## 工具定义暴露
-
-`get_tool_definitions()` 返回 OpenAI 格式的 tools 列表，传给 `call_llm_with_tools()`。
-
-## 文件操作安全
-
-路径必须在白名单范围内：
-- 项目目录
-- 用户目录
-- 当前工作目录
-
-越界路径返回错误。
-
-## 在 core.py 里的工具调用循环
-
-```
-LLM 收到用户输入 + 搜索结果
-    → 判断是否需要工具
-    → 返回 tool_calls 或直接文本回答
-    → 有 tool_calls → 执行 → 结果追加到消息历史 → 下一轮
-    → 最多 5 轮
-    → 最后一轮强制 LLM 给出最终回答
-```
-
-如果有工具调用并产生了最终答案，跳过 Task Router，直接进入人格注入。
+注册完 LLM 就能自动发现和调用它了。

@@ -25,20 +25,21 @@ _DEFAULT_CONFIG: Dict = {
         "anthropic": {"api_key": "", "base_url": "https://api.anthropic.com"}
     },
     "MODELS": {
-        "classifier":         {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
-        "parser":             {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
-        "chat":               {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
-        "code":               {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "fallback_provider": None, "fallback_model": None},
-        "logic":              {"provider": "openai",    "model": "gpt-4",              "fallback_provider": None, "fallback_model": None},
-        "polish":             {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
-        "persona_kagurazaka": {"provider": "openai",    "model": "deepseek-chat",      "fallback_provider": None, "fallback_model": None},
-        "persona_custom":     {"provider": "openai",    "model": "deepseek-chat",      "fallback_provider": None, "fallback_model": None},
-        "quality_check":      {"provider": "openai",    "model": "gpt-4.1-mini",       "fallback_provider": None, "fallback_model": None},
-        "planner":            {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "fallback_provider": None, "fallback_model": None},
-        "reviewer":           {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
-        "aggregator":         {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
-        "search_judge":       {"provider": "google",    "model": "gemini-2.5-flash",   "fallback_provider": None, "fallback_model": None},
-        "task_router":        {"provider": "anthropic", "model": "claude-sonnet-4-20250514", "fallback_provider": None, "fallback_model": None}
+        "classifier":         {"provider": "google",    "model": "gemini-3.1-flash-lite", "fallback_provider": None, "fallback_model": None},
+        "parser":             {"provider": "google",    "model": "gemini-3.1-flash-lite", "fallback_provider": None, "fallback_model": None},
+        "chat":               {"provider": "google",    "model": "gemini-3.5-flash",      "fallback_provider": None, "fallback_model": None},
+        "code":               {"provider": "anthropic", "model": "claude-opus-4-6",       "fallback_provider": None, "fallback_model": None},
+        "logic":              {"provider": "openai",    "model": "gpt-4.1",               "fallback_provider": None, "fallback_model": None},
+        "polish":             {"provider": "google",    "model": "gemini-3.1-flash-lite", "fallback_provider": None, "fallback_model": None},
+        "persona_kagurazaka": {"provider": "openai",    "model": "deepseek-v4-flash",     "fallback_provider": None, "fallback_model": None},
+        "persona_custom":     {"provider": "openai",    "model": "deepseek-v4-flash",     "fallback_provider": None, "fallback_model": None},
+        "quality_check":      {"provider": "openai",    "model": "gpt-4.1-mini",          "fallback_provider": None, "fallback_model": None},
+        "planner":            {"provider": "anthropic", "model": "claude-opus-4-6",       "fallback_provider": None, "fallback_model": None},
+        "reviewer":           {"provider": "google",    "model": "gemini-3.1-flash-lite", "fallback_provider": None, "fallback_model": None},
+        "aggregator":         {"provider": "google",    "model": "gemini-3.1-flash-lite", "fallback_provider": None, "fallback_model": None},
+        "search_judge":       {"provider": "google",    "model": "gemini-3.1-flash-lite", "fallback_provider": None, "fallback_model": None},
+        "search_quality_check":{"provider": "google",   "model": "gemini-3.1-flash-lite", "fallback_provider": None, "fallback_model": None},
+        "task_router":        {"provider": "anthropic", "model": "claude-opus-4-6",       "fallback_provider": None, "fallback_model": None}
     },
     "LOGGING": {"ENABLED": True, "DIR": "./logs/"}
 }

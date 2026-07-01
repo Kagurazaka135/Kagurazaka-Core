@@ -1,79 +1,47 @@
-# llm.py — 统一 LLM 客户端
+# llm.py — 打电话的人
 
-**所有 LLM 调用的唯一出口。** 支持 OpenAI / Google Gemini / Anthropic Claude 三种原生 API 协议。
-
-## 对外接口
-
-```python
-# 按节点名调用（最常用，自动匹配 system prompt 和模型配置）
-call_node("task_router", user_message)
-
-# 按 provider + model 直接调用
-call_llm("openai", "gpt-4.1", system_prompt, user_message)
-
-# 带工具定义的调用
-call_llm_with_tools(messages, provider, model)
-```
-
-`call_node` 做了三件事：
-1. 从 `config.py` 的 `MODELS` 里查到该节点的 provider 和 model
-2. 从 `prompts.py` 的 `SYSTEM_MAP` 拿到对应的 system prompt
-3. 转调 `call_llm()`
-
-失败时自动尝试 fallback 模型（`fallback_provider` / `fallback_model`）。
+**所有 LLM 调用都走这里。** 不管你是 OpenAI、Google Gemini 还是 Anthropic Claude，上层只喊一句 `call_node("chat", "你好")`，剩下的它搞定。
 
 ## 三个 API 适配器
 
+不同公司的 API 格式不一样，llm.py 做了翻译：
+
+| 供应商 | API 路径 | 特点 |
+|---|---|---|
+| OpenAI | `/v1/chat/completions` | 标准格式，国产模型基本都兼容这个 |
+| Google | `/v1beta/models/{model}:generateContent` | system prompt 单独放，key 走 URL |
+| Anthropic | `/v1/messages` | system 是顶层字段，key 走 header |
+
+## 怎么用
+
+```python
+# 最常用：按节点名调用
+call_node("task_router", "用户说：帮我写个爬虫")
+
+# 直接指定 provider + model
+call_llm("openai", "gpt-4.1", system_prompt, user_message)
+
+# 带工具的调用（让 LLM 能搜网页、读文件）
+call_llm_with_tools(messages, provider, model)
 ```
-call_llm(provider, model, ...)
-    │
-    ├─ provider == "openai"    → _call_openai()
-    │     POST /v1/chat/completions
-    │     {"model":"gpt-4.1","messages":[...]}
-    │
-    ├─ provider == "google"    → _call_gemini()
-    │     POST /v1beta/models/{model}:generateContent?key=...
-    │     {"contents":[...], "system_instruction":{...}}
-    │
-    └─ provider == "anthropic" → _call_anthropic()
-          POST /v1/messages
-          {"model":"claude-...", "system":"...", "messages":[...]}
-```
 
-每个适配器处理各自 API 的细节差异：
-- **OpenAI**：标准 chat completions，system/user 放 `messages`。支持 tool_calls。
-- **Gemini**：system prompt 单独放 `system_instruction`，API key 走 URL query。
-- **Claude**：system 是顶层字段，API key 走 `x-api-key` header。
+`call_node` 自动做了三件事：
+1. 查 config 里这个节点用哪个 provider 和 model
+2. 查 prompts 里这个节点用哪套 system prompt
+3. 调 `call_llm()`
 
-## 输出清理 — clean_llm_output()
+## 输出清理
 
-每轮 LLM 调用后自动执行，剔除碎碎念但保留正文：
-- DeepSeek `<think>` XML 标签
-- 元分析自言自语（"我需要/我打算/我注意到..."）
-- Markdown 格式符号（去壳留肉）
-- 步骤标签 + 引导句
-- 安全网：若清除量 >80%，退回原文
+LLM 有时候会啰嗦——"我需要分析一下..."、"我打算..."之类的自言自语，还会带 Markdown 格式符号。`clean_llm_output()` 自动摘掉这些废话，只留正文。
 
-## JSON 提取与校验
+## JSON 提取
 
-### safe_extract_json(text) → dict | None
-多轮抢救提取 JSON：
-1. 去除 ```json ... ``` 包裹
-2. 直接 `json.loads`
-3. 修复常见错误（尾随逗号、注释、单引号）后重试
-4. 正则兜底搜 `{...}` 块
-5. 全部失败返回 None（不再返回空 dict）
+很多节点要求 LLM 输出 JSON，但 LLM 有时候多套一层 ```json ... ``` 或者格式有小毛病。`safe_extract_json()` 做了多层抢救：
 
-### extract_and_validate(text, schema_name) → (data, error)
-提取 JSON 并校验 schema。schema 定义在 `SCHEMAS` 字典中：
-- `search_judge`：search_needed (bool) + search_query (str)
-- `task_router`：complexity (simple/complex) + tasks + steps
-- `quality_check`：pass (bool) + issues + suggestion
-- `search_quality_check`：quality_ok (bool) + reason + retry_query
-- `reviewer`：pass (bool) + feedback + missing_steps
+1. 剥掉 ```json 外壳
+2. 直接 json.loads
+3. 修常见错误（尾随逗号、注释、单引号）再试
+4. 正则硬搜 {...} 兜底
+5. 全失败返回 None
 
-校验失败时返回默认值，Schema 校验失败时自动重试一次。
-
-## debug.log
-
-每次 LLM 调用写一行 debug.log，包含时间、节点、provider、model、输入长度、结果长度、成功状态。
+`extract_and_validate()` 在提取后再校验 schema（比如 search_judge 必须有 search_needed 和 search_query 两个字段），不合格自动重试一次。

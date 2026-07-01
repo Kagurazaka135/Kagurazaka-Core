@@ -1,27 +1,24 @@
-# search.py — 网络搜索模块
+# search.py — 上网搜东西
 
-**只有 Search Judge 判定需要搜索时才触发。** Google 主引擎 + Bing fallback。
+**当 Search Judge 判定需要搜索时才触发。** 调 SerpAPI 搜 Google，Google 挂了就切 Bing。
 
-## 逻辑
-
-```python
-def google_search(query: str) -> str:
-    # 1. 检查 SERPAPI_KEY 是否配置
-    # 2. 主引擎：Google (SerpAPI)
-    # 3. 失败 → Bing fallback (同一 SerpAPI key)
-    # 4. 取前 5 条结果的摘要
-    # 5. 返回 "\n".join(snippets)
-```
-
-## 在 core.py 里的位置
+## 流程
 
 ```
-Search Judge → google_search(query) → 搜索缓存 → 质量检查 → 换词重搜
+Search Judge 说"需要搜，搜 XXX"
+  → 先查缓存（30 分钟内搜过直接用）
+  → 没缓存 → 调 SerpAPI
+    → Google 主引擎
+    → Google 挂了 → 自动切 Bing
+  → 取前 5 条结果的摘要
+  → 返回给 core.py
+  → 搜到的结果质量够不够？→ 不够就换词重搜
 ```
 
-搜索结果和搜索词一起存入 `memory.py` 的缓存（30min TTL）。
-质量不足时 LLM 给出新搜索词，自动重搜一次。
+## 为什么不直接爬 Google
 
-## 为什么用 SerpAPI 而不是直接爬 Google
+直接爬要处理反爬、验证码、IP 封禁。SerpAPI 走正规 API，稳定不折腾。
 
-直接爬 Google 需要处理反爬、验证码、IP 封禁。SerpAPI 走 API，稳定。不配 `SERPAPI_KEY` 不影响使用——Search Judge 判定不需要搜索的问题照常走。
+## 不配 SERPAPI_KEY 也能用
+
+Search Judge 判定不需要搜索的问题（比如闲聊、问代码）照常走。只是不能搜网页而已。

@@ -1,52 +1,45 @@
-# fallback.py — 错误恢复与容错
+# fallback.py — 救火队
 
-**LLM 调用挂了怎么办？** 指数退避重试 → Fallback 模型切换 → 优雅降级。
+**LLM 调用挂了怎么办？** 不 panic，三层兜底。
 
-## 三层容错策略
+## 三层保护
 
-### 1. 指数退避重试
-```python
-def call_llm_with_retry(provider, model, ..., max_retries=3, base_delay=1.0):
-    for attempt in range(max_retries):
-        try:
-            return call_llm(provider, model, ...)
-        except Exception as e:
-            if not is_retryable_error(e): raise  # 认证错误直接抛
-            delay = base_delay * (2 ** attempt) + random(0, 0.3)
-            sleep(delay)
+### 第一层：重试（指数退避）
+
+```
+第 1 次挂了 → 等 1 秒 → 重试
+第 2 次挂了 → 等 2 秒 → 重试
+第 3 次挂了 → 等 4 秒 → 重试
+还挂 → 进第二层
 ```
 
-### 2. Fallback 模型切换
-```python
-def call_node_with_fallback(node_name, ...):
-    try:
-        return call_llm(primary_provider, primary_model, ...)
-    except:
-        # 切到 fallback_provider/fallback_model
-        return call_llm(fallback_provider, fallback_model, ...)
+每次等待时间翻倍，加一点随机抖动（避免所有重试同时打过去）。
+
+### 第二层：换模型
+
+每个节点配置了 `fallback_provider` 和 `fallback_model`。主模型挂了自动切备用模型。
+
+```
+主模型(gpt-4.1) 挂了 → 切备用模型(gemini-3.5-flash) → 还挂 → 进第三层
 ```
 
-`llm.py` 的 `call_node` 内置了简单的 fallback（单次重试，无指数退避）。
-`fallback.py` 的 `call_node_with_fallback` 提供完整的指数退避 + fallback + 降级。
+### 第三层：优雅降级
 
-### 3. 优雅降级
-```python
-def get_degradation_strategy(node_name, context):
-    # 每个节点都有默认值：
-    #   search_judge → {"search_needed": false}  ← 不搜
-    #   task_router → {"complexity": "simple"}    ← 走简单路径
-    #   reviewer    → {"pass": true}              ← 直接通过
-    #   chat/code   → "Kagurazaka暂时不在线"      ← 兜底话术
-```
+全挂了也不 crash，每个节点有预设的降级值：
 
-全部失败时返回预定义的降级值，而不是 crash。
+| 节点 | 降级值 |
+|---|---|
+| search_judge | `{"search_needed": false}` — 不搜了 |
+| task_router | `{"complexity": "simple"}` — 走简单路径 |
+| reviewer | `{"pass": true}` — 直接通过 |
+| chat/code 等 | `"Kagurazaka暂时不在线，请稍后再试～"` |
 
-## 可重试 vs 不可重试
+## 哪些错误值得重试
 
-| 可重试 | 不可重试 |
-|--------|----------|
-| Timeout, ConnectionError | 401 认证失败 |
-| 429 rate limit, 5xx server error | 403 权限错误 |
-| ProxyError, SSLError | 404 资源不存在 |
+| 值得重试 | 不值得重试 |
+|---|---|
+| 超时、连接断开 | 401 认证失败（key 错了） |
+| 429 被限流、5xx 服务器炸了 | 403 没权限 |
+| 代理错误、SSL 错误 | 404 资源不存在 |
 
-`is_retryable_error()` 通过异常类型和错误消息关键字判断。
+认证失败重试 100 次也没用，直接抛。服务器炸了可以等会儿再试。

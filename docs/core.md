@@ -1,71 +1,44 @@
-# core.py — 工作流编排（整个系统的大脑）
+# core.py — 大脑
 
-**从用户输入到最终回答的完整流水线。** 串联搜索判断、工具调用、任务路由、双路径执行和人格注入。
+**整个系统最核心的文件。** 用户输入进来，最终回答出去，中间所有步骤都由它调度。
+
+## 它干了什么（按顺序）
+
+```
+你说话
+  → 检查是不是"刚才那个..."之类的（从记忆里翻上文）
+  → 检查是不是废话（"谢谢""好的"直接跳过搜索）
+  → 检查是不是明显要搜的东西（正则匹配"今天天气""最新新闻"）
+  → 拿不准？问 Search Judge（一个 LLM 节点，判断要不要搜）
+  → 要搜 → 先翻缓存（30分钟内搜过的直接用）→ 没缓存就调 SerpAPI → 结果质量不行就换词重搜
+  → 拿到信息了 → LLM 可能需要用工具（搜索/读文件/写文件/查时间/发HTTP请求）
+  → 工具最多跑 5 轮，跑出最终答案就停
+  → Task Router 判断：简单问题还是复杂问题？
+  → 简单 → chat/code/logic 生成 → polish 润色 → quality_check 质检（不合格打回，最多3次）
+  → 复杂 → 按计划一步步执行 → aggregator 整合 → reviewer 审查（不合格追加步骤，最多3次）
+  → 要不要加人格？（kagurazaka/custom/none）
+  → 输出给你
+  → 保存到记忆
+```
 
 ## 核心函数
 
+只有一个入口：
+
 ```python
-def run_workflow(user_input: str, memory_system: SimpleMemorySystem) -> str:
+def run_workflow(user_input: str, memory_system) -> str:
 ```
 
-只有一个入口，一个出口。
+传用户输入和记忆系统进去，拿最终回答出来。所有复杂的东西都封装在里面。
 
-## 完整流程
+## 双路径是什么
 
-### 步骤 0：记忆增强
-检测"刚才那个..."等上下文引用，从历史里捞出上文拼接。
+| | 简单路径 | 复杂路径 |
+|---|---|---|
+| 什么时候走 | Task Router 说"这题简单" | Task Router 说"要分步做" |
+| 怎么做 | 一个节点出答案 → 润色 → 质检 | 多步按计划执行 → 整合 → 评审 |
+| 适合什么 | 聊天、短回答、简单代码 | 长报告、多步推理、跨领域 |
 
-### L1 白名单 — 废话拦截器（零成本）
-纯 Python 字符串匹配。命中则跳过搜索和 Search Judge。
-包含 20+ 个闲聊短语：谢谢/好的/再见/ok/嗯/嗨/晚安 等。
+## 为什么不每次都用 LLM 判断要不要搜索
 
-### L2 正则 — 强信号匹配（零成本）
-5 组正则模式，匹配明显的搜索需求——天气/股价/汇率/热搜/怎么/哪里 等。
-命中则直接设置 `search_needed=True`，跳过 Search Judge 的 LLM 调用。
-
-### Search Judge (LLM)
-L1/L2 都未命中时，调 LLM 判断是否需要搜索并生成最优搜索词。
-输出 JSON：`{"search_needed": bool, "search_query": str}`。
-Json schema 校验失败时自动重试一次。
-
-### 搜索 + 缓存
-- 先查缓存（30min TTL，关键词模糊匹配）
-- 缓存未命中或过期 → SerpAPI 搜索（Google 主引擎 + Bing fallback）
-- 搜索结果质量检查：太短/太少自动换词重搜
-- 质量检查也用 LLM 评估，不通过时给出新搜索词
-
-### 工具调用循环（≤5 轮）
-LLM 可调用 5 个内置工具：`search_web` / `read_file` / `write_file` / `get_datetime` / `http_get`。
-每轮检查是否有 `tool_calls`，有则执行工具并继续下一轮。
-如果工具调用产生了最终答案，跳过 Task Router，直接进入人格注入。
-
-### Task Router (LLM)
-判断任务复杂度并拆解：
-- **simple**：单一问答/闲聊/简单代码 → 输出 `chat_task` / `code_task` / `logic_task`
-- **complex**：多步推理/跨领域任务 → 输出 `steps[]` 执行计划
-
-### 简单路径 (simple)
-```
-chat / code / logic（按需并行）
-    → polish（润色聚合）
-    → quality_check（≤3 轮质检打回）
-```
-
-### 复杂路径 (complex)
-```
-按 steps[] 逐步执行（每步可指定 node_type: search/chat/code/logic/polish）
-    → aggregator（整合多步结果）
-    → reviewer 循环（≤3 轮，不通过则追加 missing_steps 重新执行）
-```
-
-### 人格注入
-- `PERSONA_MODE = "kagurazaka"` → 以神楽坂人格改写输出
-- `PERSONA_MODE = "custom"` → 以自定义人格改写
-- `PERSONA_MODE = "none"` → 跳过
-
-### 异常保护
-整个 `run_workflow` 外层有 try/except，崩溃时记录 crash.log 并返回错误提示。
-
-## 为什么 L1+L2 不用 LLM
-
-50% 以上的搜索意图可以由正则和关键词识别。LLM 调用有延迟（500ms~3s），L1+L2 为零成本拦截。
+一半以上的情况用关键词和正则就能判断要不要搜索。LLM 调用要 0.5~3 秒，正则 0 秒。能省就省。
